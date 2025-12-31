@@ -1,0 +1,20 @@
+{
+  "name": "ship-repair-erp",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@8.15.4",
+  "scripts": {
+    "dev": "concurrently \"pnpm -C apps/api dev\" \"pnpm -C apps/web dev\"",
+    "db:migrate": "pnpm -C apps/api prisma migrate dev --name init",
+    "db:seed": "pnpm -C apps/api prisma db seed"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "pnpm": {
+    "packageManager": "pnpm@8.15.4"
+  },
+  "workspaces": [
+    "apps/*"
+  ]
+}

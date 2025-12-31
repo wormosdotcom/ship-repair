@@ -1,0 +1,316 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ENGINEER
+  FINANCE
+  OPS
+  ADMIN
+}
+
+enum WorkOrderStatus {
+  DRAFT
+  PENDING_SERVICE
+  IN_SERVICE
+  COMPLETED
+  PENDING_SETTLEMENT
+}
+
+enum ServiceItemStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELED
+}
+
+enum CostCategory {
+  PARTS
+  LABOR
+  OUTSOURCE
+  OTHER
+}
+
+enum Currency {
+  CNY
+  USD
+  OTHER
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+}
+
+enum PaymentMethod {
+  BANK
+  CASH
+  OTHER
+}
+
+enum ProfitReportStatus {
+  DRAFT
+  CONFIRMED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  workOrders   WorkOrder[] @relation("UserWorkOrders")
+  auditLogs    AuditLog[]
+  notifications Notification[] @relation("UserNotifications")
+  serviceItems ServiceItem[] @relation("UserServiceItems")
+  serviceAttachments ServiceAttachment[] @relation("UserServiceAttachments")
+  serviceItemEngineers ServiceItemEngineer[]
+  costLines    CostLine[] @relation("UserCostLines")
+  lockedCostLines CostLine[] @relation("UserLockedCostLines")
+  costAttachments CostAttachment[] @relation("UserCostAttachments")
+  quotes       Quote[] @relation("UserQuotes")
+  invoices     Invoice[] @relation("UserInvoices")
+  payments     PaymentReceipt[] @relation("UserPayments")
+  profitReportsCreated ProfitReport[] @relation("UserCreatedProfitReports")
+  profitReportsConfirmed ProfitReport[] @relation("ProfitReportConfirmedBy")
+}
+
+model WorkOrder {
+  id                     String           @id @default(uuid())
+  internalNo             String?          @unique
+  status                 WorkOrderStatus  @default(DRAFT)
+  operatingCompany       String
+  orderType              String
+  paymentTerms           String
+  customerCompany        String
+  vesselName             String
+  imo                    String
+  vesselType             String?
+  yearBuilt              Int?
+  grossTonnage           Int?
+  vesselNotes            String?
+  po                     String?
+  locationType           String
+  locationName           String
+  city                   String
+  startDate              DateTime
+  endDate                DateTime
+  responsibleEngineerName String?
+  responsibleOpsName     String?
+  createdById            String
+  createdBy              User             @relation("UserWorkOrders", fields: [createdById], references: [id])
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  deletedAt              DateTime?
+  deleteReason           String?
+
+  serviceItems           ServiceItem[]
+  costLines              CostLine[]
+  costAttachments        CostAttachment[]
+  quotes                 Quote[]
+  invoices               Invoice[]
+  payments               PaymentReceipt[]
+  profitReports          ProfitReport[]
+
+  @@index([imo])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  action     String
+  entityType String
+  entityId   String
+  timestamp  DateTime @default(now())
+}
+
+model Notification {
+  id                 String   @id @default(uuid())
+  type               String
+  recipient          String
+  cc                 String?
+  subject            String
+  body               String
+  relatedWorkOrderId String
+  createdAt          DateTime @default(now())
+  createdById        String?
+  createdBy          User?    @relation("UserNotifications", fields: [createdById], references: [id])
+}
+
+model ServiceItem {
+  id                 String            @id @default(uuid())
+  workOrderId        String
+  workOrder          WorkOrder         @relation(fields: [workOrderId], references: [id])
+  status             ServiceItemStatus
+  equipmentName      String
+  model              String?
+  serial             String?
+  serviceContent     String
+  createdById        String
+  createdBy          User             @relation("UserServiceItems", fields: [createdById], references: [id])
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  deletedAt          DateTime?
+  engineers          ServiceItemEngineer[]
+  attachments        ServiceAttachment[]
+
+  @@index([workOrderId])
+}
+
+model ServiceItemEngineer {
+  id            String       @id @default(uuid())
+  serviceItemId String
+  userId        String
+  serviceItem   ServiceItem  @relation(fields: [serviceItemId], references: [id])
+  user          User         @relation(fields: [userId], references: [id])
+
+  @@unique([serviceItemId, userId])
+}
+
+model ServiceAttachment {
+  id            String      @id @default(uuid())
+  serviceItemId String
+  serviceItem   ServiceItem @relation(fields: [serviceItemId], references: [id])
+  filename      String
+  path          String
+  mimeType      String
+  size          Int
+  uploaderId    String
+  uploader      User        @relation("UserServiceAttachments", fields: [uploaderId], references: [id])
+  createdAt     DateTime    @default(now())
+}
+
+model CostLine {
+  id           String       @id @default(uuid())
+  workOrderId  String
+  workOrder    WorkOrder    @relation(fields: [workOrderId], references: [id])
+  itemName     String
+  category     CostCategory
+  unitPrice    Decimal      @db.Decimal(18, 2)
+  quantity     Decimal      @db.Decimal(18, 2)
+  lineTotal    Decimal      @db.Decimal(18, 2)
+  notes        String?
+  isLocked     Boolean      @default(false)
+  lockedAt     DateTime?
+  lockedById   String?
+  lockedBy     User?        @relation("UserLockedCostLines", fields: [lockedById], references: [id])
+  createdById  String
+  createdBy    User         @relation("UserCostLines", fields: [createdById], references: [id])
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  deletedAt    DateTime?
+  attachments  CostAttachment[]
+
+  @@index([workOrderId])
+}
+
+model CostAttachment {
+  id           String    @id @default(uuid())
+  costLineId   String?
+  costLine     CostLine? @relation(fields: [costLineId], references: [id])
+  workOrderId  String
+  workOrder    WorkOrder @relation(fields: [workOrderId], references: [id])
+  filename     String
+  path         String
+  mimeType     String
+  size         Int
+  uploaderId   String
+  uploader     User      @relation("UserCostAttachments", fields: [uploaderId], references: [id])
+  createdAt    DateTime  @default(now())
+
+  @@index([workOrderId])
+}
+
+model Quote {
+  id           String    @id @default(uuid())
+  workOrderId  String
+  workOrder    WorkOrder @relation(fields: [workOrderId], references: [id])
+  amount       Decimal   @db.Decimal(18, 2)
+  currency     Currency
+  validityDate DateTime?
+  notes        String?
+  isFinal      Boolean   @default(false)
+  createdById  String
+  createdBy    User      @relation("UserQuotes", fields: [createdById], references: [id])
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([workOrderId])
+}
+
+model Invoice {
+  id           String        @id @default(uuid())
+  workOrderId  String
+  workOrder    WorkOrder     @relation(fields: [workOrderId], references: [id])
+  invoiceNo    String
+  amount       Decimal       @db.Decimal(18, 2)
+  currency     Currency
+  issueDate    DateTime
+  dueDate      DateTime?
+  status       InvoiceStatus
+  notes        String?
+  createdById  String
+  createdBy    User          @relation("UserInvoices", fields: [createdById], references: [id])
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  payments     PaymentReceipt[]
+
+  @@index([workOrderId])
+}
+
+model PaymentReceipt {
+  id           String         @id @default(uuid())
+  workOrderId  String
+  workOrder    WorkOrder      @relation(fields: [workOrderId], references: [id])
+  invoiceId    String?
+  invoice      Invoice?       @relation(fields: [invoiceId], references: [id])
+  receiptNo    String
+  amount       Decimal        @db.Decimal(18, 2)
+  currency     Currency
+  date         DateTime
+  method       PaymentMethod
+  reference    String?
+  createdById  String
+  createdBy    User           @relation("UserPayments", fields: [createdById], references: [id])
+  createdAt    DateTime       @default(now())
+
+  @@index([workOrderId])
+}
+
+model ProfitReport {
+  id                  String             @id @default(uuid())
+  workOrderId         String
+  workOrder           WorkOrder          @relation(fields: [workOrderId], references: [id])
+  status              ProfitReportStatus
+  revenueTotal        Decimal            @db.Decimal(18, 2)
+  costTotal           Decimal            @db.Decimal(18, 2)
+  profit              Decimal            @db.Decimal(18, 2)
+  marginPercent       Decimal            @db.Decimal(5, 2)
+  incomeBreakdown     Json
+  costBreakdown       Json
+  lockedCostSnapshot  Json
+  lockedInvoiceSnapshot Json
+  profitabilityRating String
+  paymentRating       String
+  overallRating       String
+  createdById         String
+  createdBy           User               @relation("UserCreatedProfitReports", fields: [createdById], references: [id])
+  confirmedById       String?
+  confirmedBy         User?              @relation("ProfitReportConfirmedBy", fields: [confirmedById], references: [id])
+  confirmedAt         DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@index([workOrderId])
+  @@index([status])
+}
